@@ -1,0 +1,1 @@
+"""ShuleYetu FastAPI Backend Package"""
