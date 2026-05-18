@@ -14,11 +14,6 @@ from ..schemas import (
     SchoolCombStatsResponse,
     SchoolFlowStatsResponse,
     NectaCombResponse,
-    RegionSummaryResponse,
-    CouncilSummaryResponse,
-    NationalSummaryResponse,
-    PaginatedResponse,
-    PaginationMeta,
 )
 
 
@@ -26,7 +21,7 @@ from ..schemas import (
 router = APIRouter(prefix="/shuleni", tags=["Shuleni Selections"])
 
 
-@router.get("/selections/{year}/summary", response_model=NationalSummaryResponse)
+@router.get("/selections/{year}/summary")
 def get_national_selections_summary(
     year: int,
     db: Session = Depends(get_db)
@@ -65,42 +60,94 @@ def get_school_selections(
     return stats
 
 
-@router.get("/region/{slug}/selections/{year}", response_model=RegionSummaryResponse)
-def get_region_selections(
+@router.get("/school/{slug}/selections/{year}/rankings")
+def get_school_rankings(
     slug: str,
     year: int,
     db: Session = Depends(get_db)
 ):
     """
-    Get regional level selections summary.
-    Powers /shuleni/region/{slug}/selections/{year} pages.
+    Get school rankings in region and council.
+    Returns rank, total schools, and percentile.
     """
+    from ..models import School
+    
+    school = db.query(School).filter(School.slug == slug).first()
+    if not school:
+        raise HTTPException(status_code=404, detail="School not found")
+    
     service = SelectionsService(db)
-    stats = service.get_region_selections_summary(slug, year)
     
-    if not stats:
-        raise HTTPException(status_code=404, detail="Region selections not found")
+    region_rank = None
+    council_rank = None
     
-    return stats
+    if school.region_id:
+        region_rank = service.get_school_rank_in_region(school.centre_number, year, school.region_id)
+    
+    if school.council_id:
+        council_rank = service.get_school_rank_in_council(school.centre_number, year, school.council_id)
+    
+    return {
+        "school_name": school.school_name,
+        "slug": slug,
+        "year": year,
+        "region_rank": region_rank,
+        "council_rank": council_rank
+    }
 
 
-@router.get("/council/{slug}/selections/{year}", response_model=CouncilSummaryResponse)
-def get_council_selections(
-    slug: str,
+@router.get("/region/{region_id}/top-schools/{year}")
+def get_top_schools_in_region(
+    region_id: int,
     year: int,
+    school_type: Optional[str] = Query(None, description="GOVERNMENT or PRIVATE"),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    """
-    Get council level selections summary.
-    Powers /shuleni/council/{slug}/selections/{year} pages.
-    """
+    """Get top schools in a region by outgoing students."""
     service = SelectionsService(db)
-    stats = service.get_council_selections_summary(slug, year)
-    
-    if not stats:
-        raise HTTPException(status_code=404, detail="Council selections not found")
-    
-    return stats
+    return service.get_top_schools_by_location(
+        year=year,
+        location_type='region',
+        location_id=region_id,
+        limit=limit,
+        school_type=school_type
+    )
+
+
+@router.get("/council/{council_id}/top-schools/{year}")
+def get_top_schools_in_council(
+    council_id: int,
+    year: int,
+    school_type: Optional[str] = Query(None, description="GOVERNMENT or PRIVATE"),
+    limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db)
+):
+    """Get top schools in a council by outgoing students."""
+    service = SelectionsService(db)
+    return service.get_top_schools_by_location(
+        year=year,
+        location_type='council',
+        location_id=council_id,
+        limit=limit,
+        school_type=school_type
+    )
+
+
+@router.get("/special-placements/{year}")
+def get_special_schools_placements(
+    year: int,
+    location_type: Optional[str] = Query(None, description="region or council"),
+    location_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Get placements to special schools."""
+    service = SelectionsService(db)
+    return service.get_special_schools_placements(
+        year=year,
+        location_type=location_type,
+        location_id=location_id
+    )
 
 
 @router.get("/top-combinations/{year}", response_model=List[CombStatsResponse])
@@ -149,7 +196,7 @@ def get_school_flows(
     Shows origin → destination with student counts.
     """
     service = SelectionsService(db)
-    return service.get_school_flow_stats(year=year, exam_type=exam_type, limit=limit)
+    return service.get_school_flow_stats(year=year, limit=limit)
 
 
 # Combinations router
@@ -174,7 +221,7 @@ def get_combination_detail(
     return comb
 
 
-@comb_router.get("/{slug}/stats", response_model=List[CombStatsResponse])
+@comb_router.get("/{slug}/stats")
 def get_combination_national_stats(
     slug: str,
     year: Optional[int] = None,
@@ -191,52 +238,7 @@ def get_combination_national_stats(
     return selections_service.get_comb_stats_national(comb.code, year)
 
 
-@comb_router.get("/{slug}/region/{region_slug}/stats", response_model=List[CombStatsResponse])
-def get_combination_regional_stats(
-    slug: str,
-    region_slug: str,
-    year: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
-    """Get regional-level statistics for a combination."""
-    comb_service = CombinationService(db)
-    comb = comb_service.get_comb_by_slug(slug)
-    
-    if not comb:
-        raise HTTPException(status_code=404, detail="Combination not found")
-    
-    # Get region ID from slug first
-    region_data = comb_service.get_region_by_slug(region_slug)
-    if not region_data:
-        raise HTTPException(status_code=404, detail="Region not found")
-    
-    selections_service = SelectionsService(db)
-    return selections_service.get_comb_stats_by_region(comb.code, region_data.id, year)
-
-
-@comb_router.get("/{slug}/council/{council_slug}/stats", response_model=List[CombStatsResponse])
-def get_combination_council_stats(
-    slug: str,
-    council_slug: str,
-    year: Optional[int] = None,
-    db: Session = Depends(get_db)
-):
-    """Get council-level statistics for a combination."""
-    comb_service = CombinationService(db)
-    comb = comb_service.get_comb_by_slug(slug)
-    
-    if not comb:
-        raise HTTPException(status_code=404, detail="Combination not found")
-    
-    council_data = comb_service.get_council_by_slug(council_slug)
-    if not council_data:
-        raise HTTPException(status_code=404, detail="Council not found")
-    
-    selections_service = SelectionsService(db)
-    return selections_service.get_comb_stats_by_council(comb.code, council_data.id, year)
-
-
-@comb_router.get("/{slug}/schools-offering", response_model=List[SchoolCombStatsResponse])
+@comb_router.get("/{slug}/schools-offering")
 def get_schools_offering_combination(
     slug: str,
     year: Optional[int] = None,
@@ -254,12 +256,11 @@ def get_schools_offering_combination(
     return selections_service.get_school_comb_stats(
         comb_code=comb.code,
         year=year,
-        limit=limit,
-        is_destination=True
+        limit=limit
     )
 
 
-@comb_router.get("/{slug}/feeder-schools", response_model=List[SchoolCombStatsResponse])
+@comb_router.get("/{slug}/feeder-schools")
 def get_feeder_schools_for_combination(
     slug: str,
     year: Optional[int] = None,
@@ -277,6 +278,5 @@ def get_feeder_schools_for_combination(
     return selections_service.get_school_comb_stats(
         comb_code=comb.code,
         year=year,
-        limit=limit,
-        is_destination=False
+        limit=limit
     )
