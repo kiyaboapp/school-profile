@@ -1,120 +1,138 @@
-# ShuleYetu — Tanzania Education Data Platform
+# Shuleni - Tanzania School Selections Platform
 
-Complete Next.js 14+ frontend with FastAPI backend for Tanzania school selections, results, and analytics.
+Professional Next.js 14 + FastAPI platform for comprehensive Tanzania school selections data.
 
-## Architecture
+## 🚀 Architecture
 
 ### Frontend (Next.js 14+)
-- **App Router** with Server Components
-- **TypeScript** strict mode
-- **Tailwind CSS** with dark mode support
-- **Mobile-first** responsive design
+- **Location**: `/workspace/app/shuleni/**`
+- **Framework**: Next.js 14 App Router with Server Components
+- **Styling**: Tailwind CSS with mobile-first responsive design
+- **Features**: Full dark mode support, SEO-optimized, ISR caching
 
 ### Backend (FastAPI)
-- **Pydantic schemas** mirroring SQLAlchemy models
-- **Service layer** for business logic
-- **RESTful API** at `/api/v1`
-- **CORS enabled** for Next.js integration
+- **Location**: `/workspace/backend/**`
+- **Schemas**: Pydantic models mirroring SQLAlchemy database models
+- **Services**: Business logic layer for data queries
+- **API Routes**: RESTful endpoints under `/api/v1/shuleni/*`
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 /workspace
-├── app/                    # Next.js App Router pages
-│   ├── comb/              # Combination pages (/comb/[slug])
-│   ├── shule/             # School pages (/shule/[slug]/uchaguzi/[year])
-│   ├── uchaguzi/          # National selections hub
-│   ├── mkoa/              # Regional pages
-│   └── halmashauri/       # Council pages
-├── backend/               # FastAPI backend
-│   ├── api/               # Route handlers
-│   ├── schemas/           # Pydantic schemas
-│   ├── services/          # Business logic
-│   ├── core/              # Config & database
-│   └── main.py            # Application entry point
-├── components/            # React components
-├── lib/                   # Utilities & API client
-├── types/                 # TypeScript type definitions
-└── *.py                   # SQLAlchemy models
+├── app/                          # Next.js App Router
+│   ├── shuleni/                  # All platform pages
+│   │   ├── school/[slug]/selections/[year]/page.tsx
+│   │   ├── selections/[year]/page.tsx
+│   │   ├── region/[slug]/selections/[year]/page.tsx
+│   │   ├── council/[slug]/selections/[year]/page.tsx
+│   │   ├── comb/[slug]/page.tsx
+│   │   ├── comb/[slug]/region/[regionSlug]/page.tsx
+│   │   ├── comb/[slug]/council/[councilSlug]/page.tsx
+│   │   └── flows/[year]/page.tsx
+│   ├── layout.tsx
+│   └── page.tsx                  # Homepage
+├── backend/                      # FastAPI Backend
+│   ├── api/selections.py         # API routes
+│   ├── schemas/__init__.py       # Pydantic schemas
+│   ├── services/selections.py    # Business logic
+│   └── core/                     # Config & database
+├── lib/
+│   ├── api.ts                    # API client
+│   └── utils.ts                  # Helper functions
+└── types/index.ts                # TypeScript types
 ```
 
-## Key Features
+## 🔌 API Endpoints
 
-### KATA/MKOA Handling
-The raw selection status values (KATA, MKOA, KUTWA, BWENI) are **aggregated during import** into stored columns:
-- `outgoing_ward_scope` ← KATA (same ward)
-- `outgoing_regional_scope` ← MKOA (same region)
-- `outgoing_day` ← KUTWA
-- `outgoing_boarding` ← BWENI
+### Base URL: `/api/v1/shuleni`
 
-These are accessed via `SchoolSummaryStats` in both backend and frontend.
+#### Selections
+- `GET /selections/{year}/summary` - National summary
+- `GET /school/{slug}/selections/{year}` - School selections
+- `GET /region/{slug}/selections/{year}` - Regional selections
+- `GET /council/{slug}/selections/{year}` - Council selections
+- `GET /top-combinations/{year}` - Top combinations
+- `GET /top-incoming-schools/{year}` - Top incoming schools
+- `GET /top-outgoing-schools/{year}` - Top outgoing schools
+- `GET /flows/{year}?exam_type=alevel` - School flows
 
-### API Endpoints
+#### Combinations
+- `GET /comb/{slug}` - Combination details
+- `GET /comb/{slug}/stats?year=2024` - National stats
+- `GET /comb/{slug}/region/{regionSlug}/stats` - Regional stats
+- `GET /comb/{slug}/council/{councilSlug}/stats` - Council stats
+- `GET /comb/{slug}/schools-offering?limit=100` - Destination schools
+- `GET /comb/{slug}/feeder-schools?limit=100` - Origin schools
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /api/v1/selections/shule/{slug}/{year}` | School selections summary |
-| `GET /api/v1/selections/uchaguzi/{year}/summary` | National summary |
-| `GET /api/v1/selections/mchanganyiko/{slug}` | Combination details |
-| `GET /api/v1/selections/mchanganyiko/{slug}/stats` | Combination national stats |
-| `GET /api/v1/selections/mchanganyiko/{slug}/mkoa/{region_id}/stats` | Regional stats |
-| `GET /api/v1/selections/mchanganyiko/{slug}/halmashauri/{council_id}/stats` | Council stats |
-| `GET /api/v1/selections/mtiririko/{year}` | School flow data |
+## 🎯 Key Features
 
-## Getting Started
+### Geographic Scope Handling
+The platform correctly handles geographic distribution:
+- `outgoing_ward_scope`: Students placed OUTSIDE their ward (KATA leakage)
+- `outgoing_council_scope`: Students placed OUTSIDE their council
+- `outgoing_regional_scope`: Students placed OUTSIDE their region (MKOA leakage)
 
-### Backend Setup
+**Retention is calculated as**: `Total - Outgoing = Retained`
 
-```bash
-cd /workspace
-pip install fastapi uvicorn sqlalchemy pydantic-settings psycopg2-binary
+### Page Types & Scale
+| Page Type | URL Pattern | Estimated Count |
+|-----------|-------------|-----------------|
+| School Selections | `/shuleni/school/{slug}/selections/{year}` | ~100,000+ |
+| National Summary | `/shuleni/selections/{year}` | ~5 |
+| Regional Selections | `/shuleni/region/{slug}/selections/{year}` | ~155 (31 regions × 5 years) |
+| Council Selections | `/shuleni/council/{slug}/selections/{year}` | ~920 (184 councils × 5 years) |
+| Combination Detail | `/shuleni/comb/{slug}` | ~50 |
+| Comb × Region | `/shuleni/comb/{slug}/region/{region}` | ~1,550 |
+| Comb × Council | `/shuleni/comb/{slug}/council/{council}` | ~9,200 |
+| Flow Data | `/shuleni/flows/{year}` | ~10 |
 
-# Set environment variables
-export DATABASE_URL="postgresql://user:pass@localhost/shuleyetu"
+**Total Potential Pages**: 110,000+
 
-# Run the API server
-python -m backend.main
-```
+## 🛠️ Setup
 
-Server runs at `http://localhost:8000`
-API docs at `http://localhost:8000/docs`
-
-### Frontend Setup
-
+### Frontend
 ```bash
 cd /workspace
 npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:3000`
+### Backend
+```bash
+cd /workspace/backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
 
-Set `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1` in `.env.local`
+## 🎨 Design Principles
 
-## Page Coverage
+1. **Mobile-First**: All components use responsive Tailwind classes
+2. **Dark Mode**: Full support with `dark:` variants throughout
+3. **SEO-Optimized**: Dynamic metadata, structured data, semantic HTML
+4. **Performance**: ISR with 1-hour revalidation, server components
+5. **Accessibility**: Proper heading hierarchy, ARIA labels, keyboard navigation
 
-Based on blueprint v6:
+## 📊 Data Model Alignment
 
-| Page Type | URL Pattern | Count |
-|-----------|-------------|-------|
-| School selections | `/shule/{slug}/uchaguzi/{year}` | ~100k+ |
-| National hub | `/uchaguzi/{year}` | ~5 |
-| Combination national | `/comb/{slug}` | ~20 |
-| Combination × region | `/comb/{slug}/mkoa/{region}` | ~620 |
-| Combination × council | `/comb/{slug}/halmashauri/{council}` | ~3.7k |
-| Region selections | `/mkoa/{slug}/uchaguzi/{year}` | ~155 |
-| Council selections | `/halmashauri/{slug}/uchaguzi/{year}` | ~925 |
-| Flow map | `/mtiririko/{exam}/{year}` | ~45 |
+All TypeScript types and Pydantic schemas directly mirror the SQLAlchemy models:
+- `SchoolSummaryStats` - Core selections data
+- `SchoolCombStats` - Combination breakdowns
+- `SchoolFlowStats` - School-to-school flows
+- `CombStats` - Combination statistics
+- `NectaComb` - Combination definitions
 
-## Dark Mode Support
+## 🔐 Environment Variables
 
-All components use Tailwind's `dark:` variants:
-- `bg-gray-50 dark:bg-gray-900`
-- `text-gray-900 dark:text-white`
-- `border-gray-200 dark:border-gray-700`
+Create `.env.local`:
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+```
 
-Enable dark mode by adding `dark` class to `<html>` element or using system preference.
+## 📝 License
 
-## License
+Proprietary - KiyaboApp
 
-MIT License
+---
+
+Built with ❤️ for Tanzania's education ecosystem
