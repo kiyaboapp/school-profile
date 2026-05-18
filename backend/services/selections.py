@@ -3,21 +3,9 @@ Services for ShuleYetu API
 Business logic layer between routes and database
 """
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, desc, asc
+from sqlalchemy import func, desc, asc, case, cast, Integer
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime
-
-from ..schemas import (
-    SchoolSummaryStatsResponse,
-    CombStatsResponse,
-    SchoolCombStatsResponse,
-    SchoolFlowStatsResponse,
-    SchoolCourseStatsResponse,
-    NectaCombResponse,
-    RegionResponse,
-    CouncilResponse,
-    SchoolResponse,
-)
 
 
 class SelectionsService:
@@ -70,6 +58,203 @@ class SelectionsService:
             return None
         
         return SchoolSummaryStatsResponse.model_validate(stats)
+    
+    def get_school_rank_in_region(
+        self,
+        centre_number: str,
+        year: int,
+        region_id: int
+    ) -> Dict[str, Any]:
+        """Calculate school's rank in region based on outgoing students."""
+        from ..models import SchoolSummaryStats, School
+        
+        # Get the school's stats
+        school_stats = (
+            self.db.query(SchoolSummaryStats)
+            .join(School, SchoolSummaryStats.centre_number == School.centre_number)
+            .filter(
+                SchoolSummaryStats.centre_number == centre_number,
+                SchoolSummaryStats.cycle_year == year,
+                School.region_id == region_id
+            )
+            .first()
+        )
+        
+        if not school_stats:
+            return {"rank": None, "total_schools": 0}
+        
+        # Count schools with higher outgoing totals
+        schools_higher = (
+            self.db.query(func.count(SchoolSummaryStats.id))
+            .join(School, SchoolSummaryStats.centre_number == School.centre_number)
+            .filter(
+                SchoolSummaryStats.cycle_year == year,
+                School.region_id == region_id,
+                SchoolSummaryStats.outgoing_total > school_stats.outgoing_total
+            )
+            .scalar() or 0
+        )
+        
+        # Total schools in region
+        total_schools = (
+            self.db.query(func.count(SchoolSummaryStats.id))
+            .join(School, SchoolSummaryStats.centre_number == School.centre_number)
+            .filter(
+                SchoolSummaryStats.cycle_year == year,
+                School.region_id == region_id
+            )
+            .scalar() or 0
+        )
+        
+        rank = schools_higher + 1
+        
+        return {
+            "rank": rank,
+            "total_schools": total_schools,
+            "percentile": round((1 - rank / total_schools) * 100, 1) if total_schools > 0 else 0
+        }
+    
+    def get_school_rank_in_council(
+        self,
+        centre_number: str,
+        year: int,
+        council_id: int
+    ) -> Dict[str, Any]:
+        """Calculate school's rank in council based on outgoing students."""
+        from ..models import SchoolSummaryStats, School
+        
+        school_stats = (
+            self.db.query(SchoolSummaryStats)
+            .join(School, SchoolSummaryStats.centre_number == School.centre_number)
+            .filter(
+                SchoolSummaryStats.centre_number == centre_number,
+                SchoolSummaryStats.cycle_year == year,
+                School.council_id == council_id
+            )
+            .first()
+        )
+        
+        if not school_stats:
+            return {"rank": None, "total_schools": 0}
+        
+        schools_higher = (
+            self.db.query(func.count(SchoolSummaryStats.id))
+            .join(School, SchoolSummaryStats.centre_number == School.centre_number)
+            .filter(
+                SchoolSummaryStats.cycle_year == year,
+                School.council_id == council_id,
+                SchoolSummaryStats.outgoing_total > school_stats.outgoing_total
+            )
+            .scalar() or 0
+        )
+        
+        total_schools = (
+            self.db.query(func.count(SchoolSummaryStats.id))
+            .join(School, SchoolSummaryStats.centre_number == School.centre_number)
+            .filter(
+                SchoolSummaryStats.cycle_year == year,
+                School.council_id == council_id
+            )
+            .scalar() or 0
+        )
+        
+        rank = schools_higher + 1
+        
+        return {
+            "rank": rank,
+            "total_schools": total_schools,
+            "percentile": round((1 - rank / total_schools) * 100, 1) if total_schools > 0 else 0
+        }
+    
+    def get_top_schools_by_location(
+        self,
+        year: int,
+        location_type: str,  # 'region', 'council', 'ward'
+        location_id: int,
+        limit: int = 20,
+        school_type: Optional[str] = None  # 'GOVERNMENT', 'PRIVATE'
+    ) -> List[Dict[str, Any]]:
+        """Get top schools by outgoing students for a location."""
+        from ..models import SchoolSummaryStats, School
+        
+        query = (
+            self.db.query(
+                SchoolSummaryStats,
+                School.school_name,
+                School.slug,
+                School.school_type
+            )
+            .join(School, SchoolSummaryStats.centre_number == School.centre_number)
+            .filter(
+                SchoolSummaryStats.cycle_year == year,
+                SchoolSummaryStats.outgoing_total > 0
+            )
+        )
+        
+        if location_type == 'region':
+            query = query.filter(School.region_id == location_id)
+        elif location_type == 'council':
+            query = query.filter(School.council_id == location_id)
+        elif location_type == 'ward':
+            query = query.filter(School.ward_id == location_id)
+        
+        if school_type:
+            query = query.filter(School.school_type == school_type)
+        
+        results = (
+            query.order_by(desc(SchoolSummaryStats.outgoing_total))
+            .limit(limit)
+            .all()
+        )
+        
+        return [
+            {
+                "school_name": r.school_name,
+                "slug": r.slug,
+                "school_type": r.school_type,
+                "outgoing_total": r.outgoing_total,
+                "outgoing_female": r.outgoing_female,
+                "outgoing_male": r.outgoing_male,
+                "outgoing_alevel": r.outgoing_alevel,
+                "outgoing_college": r.outgoing_college,
+            }
+            for r in results
+        ]
+    
+    def get_special_schools_placements(
+        self,
+        year: int,
+        location_type: Optional[str] = None,
+        location_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get placements to special schools (national schools, etc)."""
+        from ..models import SchoolFlowStats, School as SchoolModel
+        
+        # Create alias for destination school
+        SchoolDest = SchoolModel.__table__.alias('destination_school')
+        
+        query = (
+            self.db.query(
+                SchoolFlowStats,
+                SchoolModel.school_name.label('origin_name'),
+            )
+            .join(SchoolModel, SchoolFlowStats.origin_centre_number == SchoolModel.centre_number)
+            .filter(SchoolFlowStats.cycle_year == year)
+        )
+        
+        # We'll need to enrich with destination data separately
+        results = query.order_by(desc(SchoolFlowStats.student_count)).limit(50).all()
+        
+        return [
+            {
+                "origin_school": r.origin_name,
+                "destination_centre": r.destination_centre_number if hasattr(r, 'destination_centre_number') else None,
+                "student_count": r.student_count,
+                "female_count": r.female_count,
+                "male_count": r.male_count,
+            }
+            for r in results
+        ]
     
     def get_comb_stats_national(
         self,
@@ -153,7 +338,8 @@ class SelectionsService:
         destination_centre_number: Optional[str] = None,
         comb_code: Optional[str] = None,
         year: Optional[int] = None,
-        limit: int = 50
+        limit: int = 50,
+        is_destination: bool = False
     ) -> List[SchoolCombStatsResponse]:
         """Get combination allocation stats with filters."""
         from ..models import SchoolCombStats
@@ -203,7 +389,6 @@ class SelectionsService:
         """Get national selections summary for a year."""
         from ..models import SchoolSummaryStats
         
-        # Aggregate across all schools
         result = (
             self.db.query(
                 func.sum(SchoolSummaryStats.outgoing_total).label('total_outgoing'),
