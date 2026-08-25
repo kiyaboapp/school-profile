@@ -74,8 +74,8 @@ export async function getSchoolCombStats(
   direction: 'origin' | 'destination'
 ): Promise<SchoolCombStats[]> {
   const endpoint = direction === 'origin'
-    ? `/selections/mchanganyiko/ALL/shule-watoka?year=${year}&limit=50`
-    : `/selections/mchanganyiko/ALL/shule-zinazotoa?year=${year}&limit=50`;
+    ? `/selections/comb/ALL/shule-watoka?year=${year}&limit=50`
+    : `/selections/comb/ALL/shule-zinazotoa?year=${year}&limit=50`;
   return fetchAPI<SchoolCombStats[]>(endpoint) || [];
 }
 
@@ -111,7 +111,7 @@ export async function getSubjectRanks(
 // ==================== COMBINATION APIs ====================
 
 export async function getCombBySlug(slug: string): Promise<NectaComb | null> {
-  return fetchAPI<NectaComb>(`/selections/mchanganyiko/${slug}`);
+  return fetchAPI<NectaComb>(`/selections/comb/${slug}`);
 }
 
 export async function getCombStatsNational(
@@ -119,7 +119,7 @@ export async function getCombStatsNational(
   year?: number
 ): Promise<CombStats[]> {
   const yearParam = year ? `?year=${year}` : '';
-  return fetchAPI<CombStats[]>(`/selections/mchanganyiko/${combCode.toLowerCase()}/stats${yearParam}`) || [];
+  return fetchAPI<CombStats[]>(`/selections/comb/${combCode.toLowerCase()}/stats${yearParam}`) || [];
 }
 
 export async function getCombStatsByRegion(
@@ -128,7 +128,7 @@ export async function getCombStatsByRegion(
   year?: number
 ): Promise<CombStats[]> {
   const yearParam = year ? `?year=${year}` : '';
-  return fetchAPI<CombStats[]>(`/selections/mchanganyiko/${combCode.toLowerCase()}/mkoa/${regionId}/stats${yearParam}`) || [];
+  return fetchAPI<CombStats[]>(`/selections/comb/${combCode.toLowerCase()}/mkoa/${regionId}/stats${yearParam}`) || [];
 }
 
 export async function getCombStatsByCouncil(
@@ -137,7 +137,7 @@ export async function getCombStatsByCouncil(
   year?: number
 ): Promise<CombStats[]> {
   const yearParam = year ? `?year=${year}` : '';
-  return fetchAPI<CombStats[]>(`/selections/mchanganyiko/${combCode.toLowerCase()}/halmashauri/${councilId}/stats${yearParam}`) || [];
+  return fetchAPI<CombStats[]>(`/selections/comb/${combCode.toLowerCase()}/halmashauri/${councilId}/stats${yearParam}`) || [];
 }
 
 // ==================== GEOGRAPHIC APIs ====================

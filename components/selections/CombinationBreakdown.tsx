@@ -44,7 +44,7 @@ export function CombinationBreakdown({ combStats, year }: CombinationBreakdownPr
         <div key={combCode} className="bg-white rounded-lg border border-gray-200 p-4">
           <div className="flex items-center justify-between mb-3">
             <Link 
-              href={`/mchanganyiko/${combCode.toLowerCase()}`}
+              href={`/comb/${combCode.toLowerCase()}`}
               className="text-xl font-bold text-blue-600 hover:text-blue-700"
             >
               {combCode}
